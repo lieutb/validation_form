@@ -19,7 +19,26 @@ function Validator(option) {
                 if (typeof option.onSubmit == 'function') {
                     let enableInputs = formElement.querySelectorAll('[name]')
                     let formData = Array.from(enableInputs).reduce((values, input) => {
-                        values[input.name] = input.value
+                        switch (input.type) {
+                            case 'radio':
+                                values[input.name] = formElement.querySelector('input[name="' + input.name + '"]:checked').value
+                                break;
+                            case 'checkbox':
+                                if (!input.matches(':checked')) {
+                                    values[input.name] = ''
+                                    return values
+                                }
+                                if (!Array.isArray(values[input.name])) {
+                                    values[input.name] = []
+                                }
+                                values[input.name].push(input.value)
+                                break;
+                            case 'file':
+                                values[input.name] = input.files
+                                break
+                            default:
+                                values[input.name] = input.value
+                        }
                         return values
                     }, {})
 
@@ -33,27 +52,40 @@ function Validator(option) {
         }
 
         option.rule.forEach(rule => {
-            let inputElement = formElement.querySelector(rule.selector)
-            let parent = inputElement.closest(option.formGroupSelector)
-            if (inputElement) {
-                // save rules in selectRules
-                if (Array.isArray(selectRules[rule.selector])) {
-                    selectRules[rule.selector].push(rule.check)
-                } else {
-                    selectRules[rule.selector] = [rule.check]
-                }
+            let inputElements = formElement.querySelectorAll(rule.selector)
+            Array.from(inputElements).forEach((inputElement) => {
+                if (inputElement) {
+                    let parent = inputElement.closest(option.formGroupSelector)
 
-                // handle onblur, show message when blur
-                inputElement.onblur = function () {
-                    validate(inputElement, rule)
-                }
+                    // save rules in selectRules
+                    if (Array.isArray(selectRules[rule.selector])) {
+                        selectRules[rule.selector].push(rule.check)
+                    } else {
+                        selectRules[rule.selector] = [rule.check]
+                    }
 
-                // handle oninput, remove message when typing
-                inputElement.oninput = function () {
-                    parent.classList.remove('invalid')
-                    parent.querySelector(option.errorSelector).innerText = ''
+                    // handle onblur, show message when blur
+                    inputElement.onblur = function () {
+                        validate(inputElement, rule)
+                    }
+
+                    // handle oninput, remove message when typing
+                    inputElement.oninput = function () {
+                        parent.classList.remove('invalid')
+                        parent.querySelector(option.errorSelector).innerText = ''
+                    }
+
+                    // handle onchange select
+                    inputElement.onchange = function () {
+                        if (!inputElement.value) {
+                            validate(inputElement, rule)
+                        }
+                        console.log(inputElement.value);
+                        // parent.classList.remove('invalid')
+                        // parent.querySelector(option.errorSelector).innerText = ''
+                    }
                 }
-            }
+            })
         })
     }
 
@@ -67,7 +99,14 @@ function Validator(option) {
 
         // loop and check input
         for (let i = 0; i < currentRule.length; i++) {
-            errorMessage = currentRule[i](inputElement.value)
+            switch (inputElement.type) {
+                case 'radio':
+                case 'checkbox':
+                    errorMessage = currentRule[i](formElement.querySelector(rule.selector + ':checked'))
+                    break;
+                default:
+                    errorMessage = currentRule[i](inputElement.value)
+            }
 
             // exit on errorMessage available
             if (errorMessage) break
@@ -89,7 +128,7 @@ Validator.isRequired = function (selector, message) {
     return {
         selector,
         check(value) {
-            return value.trim() ? undefined : message || 'Vui lòng nhập trường này!'
+            return value ? undefined : message || 'Vui lòng nhập trường này!'
         }
     }
 }
@@ -113,11 +152,11 @@ Validator.minLength = function (selector, min, message) {
     }
 }
 
-Validator.spacing = function (selector) {
+Validator.isSpacing = function (selector, message) {
     return {
         selector,
         check(value) {
-            return value.includes(' ') ? 'Mật khẩu không được chứa khoảng trắng!' : undefined
+            return value.includes(' ') ? message || 'Mật khẩu không được chứa ký tự khoảng trắng!' : undefined
         }
     }
 }
